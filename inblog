@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+
+# inblog 0.1
+# copyright (c) weebney 2024
+# licensed under the BSD 2 Clause license
+# see `license` for details
+
+# logging
+info() {
+	printf "\e[32m[INFO]\e[0m $1\n" "${@:2}" >&2
+}
+fatal() {
+	printf "\e[31m[FATA]\e[0m $1\n" "${@:2}"
+	exit 1
+}
+
+mkdir './.temp/' &> /dev/null
+mkdir './content/' &> /dev/null
+mkdir './content/posts/' &> /dev/null
+mkdir './content/templates/' &> /dev/null
+mkdir './public/' &> /dev/null
+mkdir './public/posts/' &> /dev/null
+[ ! -f '.cache' ] && echo "0" > .cache
+
+# ensure templates exist
+listitem_template_literal='<li><a href="%HYPERLINK%">%SUBJECT%</a> <span>%DATE%</span>'
+index_template_literal='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Index - %BLOG_NAME%</title></head><body><h1>Index of %BLOG_NAME%</h1><ul>%LIST%</ul><footer><span>Powered by inblog</span></footer></body></html>'
+post_template_literal='<!doctype html><html lang="en"><head><meta charset="utf8"><title>%SUBJECT% - %BLOG_NAME%</title></head><body><a href="../index.html">back</a><h1 id="subject">%SUBJECT%</h1><p id="date">%DATE%</p><div id="content">%BODY%</div></body></html>'
+[ ! -f './content/templates/listitem.template.html' ] && echo "$listitem_template_literal" > ./content/templates/listitem.template.html && info "Setting up templates in 'content/templates'..."
+[ ! -f './content/templates/index.template.html' ] && echo "$index_template_literal" > ./content/templates/index.template.html
+[ ! -f './content/templates/post.template.html' ] && echo "$post_template_literal" > ./content/templates/post.template.html
+
+# EMAIL GATHERING STAGE ----------------------------------------
+creds=$INBLOG_EMAIL':'$INBLOG_PASSWORD
+message_count=$(curl -su "$creds" "imaps://$INBLOG_IMAPSSERVER" -X "STATUS $INBLOG_MAILBOX (UIDNEXT)" | grep -oE '[0-9]+' | tail -1)
+info "Logging in..."
+
+# check cache file to see where we left off last time
+last_uid=$(cat '.cache')
+
+if [[ "$message_count" == '' ]]; then
+    fatal "Failed to get message count: $message_count"
+fi
+
+if [ "$message_count" -gt "$last_uid" ]; then
+    info "$(($message_count - $last_uid)) new messages!"
+    for (( uid=$last_uid; uid <= $message_count; uid++ )); do
+
+        # setup directory
+        mkdir './.temp/'$uid &> /dev/null
+
+        # fetch email
+        raw_email=$(curl -su "$creds" 'imaps://'"$INBLOG_IMAPSSERVER"'/'"$INBLOG_MAILBOX"';UID='$uid)
+
+        # verify that the email was sent from the approved sender
+        if [[ $(echo "$raw_email" | grep 'From: ' ) != *"$INBLOG_APPROVED_SENDER"* ]]; then
+            info "Skipped an email (not from approved sender or no content)"
+            continue
+        fi
+
+        info "Processing an email..."
+
+        # save email to .eml
+        echo "$raw_email" > './.temp/'$uid'/'$uid'.eml'
+
+        # get body content via munpack
+        munpack -qtC './.temp/'$uid $uid'.eml' &> /dev/null
+
+        # save body/markdown to content folder
+        cat './.temp/'$uid'/part1' > './content/posts/'$uid'.md'
+
+        # get subject
+        subject=$(echo "$raw_email" | grep 'Subject:' | sed 's/Subject: //')
+        subject=${subject%?} # trim the carriage return
+        if [[ "$subject" == '' ]]; then
+            subject='(No subject)'
+        fi
+
+        # get date
+        date=$(echo "$raw_email" | grep 'Date:' | sed 's/Date: //' )
+        date=${date%?} # trim the carriage return
+
+        # prepend frontmatter
+        printf '%s\n%s\n%s\n' "$subject" "$date" "$(cat './content/posts/'$uid'.md')" > './content/posts/'$uid'.md'
+    done
+else
+    info "No new messages"
+fi
+
+# update cache file to where we're leaving off
+echo "$message_count" > .cache
+
+
+# HTML GENERATION STAGE ----------------------------------------
+info "Generating HTML..."
+touch './.temp/listitems.htm'
+for file in $(ls ./content/posts/ | sort -r); do
+    # make path relative
+    file="./content/posts/$file"
+
+    # grab the subject and date from the frontmatter
+    subject=$(sed -n '1p' "$file")
+    date=$(sed -n '2p' "$file")
+
+    # create the hyperlink
+    hyperlink="./posts/${subject}${date}.html"
+
+    # convert body content (without frontmatter) to html
+    bhtml=$(cat "$file" | sed '1,2d' | cmark --unsafe)
+
+    # insert html into post template, recording it to ./public/posts
+    template=$(cat './content/templates/post.template.html')
+    template=${template//%SUBJECT%/$subject}
+    template=${template//%BODY%/$bhtml}
+    template=${template//%DATE%/$date}
+    template=${template//%BLOG_NAME%/$INBLOG_NAME}
+    echo "$template" > './public/'"$hyperlink"
+
+    # add list item to list item temp file
+    template=$(cat './content/templates/listitem.template.html')
+    template=${template//%SUBJECT%/$subject}
+    template=${template//%BODY%/$bhtml}
+    template=${template//%HYPERLINK%/$hyperlink}
+    template=${template//%DATE%/$date}
+    template=${template//%BLOG_NAME%/$INBLOG_NAME}
+    echo "$template" >> './.temp/listitems.htm'
+done
+
+# insert list items to index
+list=$(cat './.temp/listitems.htm')
+template=$(cat './content/templates/index.template.html')
+template=${template//%BLOG_NAME%/$INBLOG_NAME}
+template=${template//%LIST%/$list}
+echo "$template" > './public/index.html'
+
+# cleanup
+rm -rf './.temp/' &> /dev/null
+
+exit 0
