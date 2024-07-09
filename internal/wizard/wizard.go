@@ -128,7 +128,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case tea.KeyCtrlC, tea.KeyEsc:
-			return m, tea.Quit
+			os.Exit(1)
 		}
 
 	// Handle errors just like any other message

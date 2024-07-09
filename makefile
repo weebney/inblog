@@ -6,6 +6,7 @@ SIDE_EFFECTS = .cache content public bin
 GOCMD = go
 GOBUILD = $(GOCMD) build
 GOCLEAN = $(GOCMD) clean
+GOMODTIDY = $(GOCMD) mod tidy
 
 # Platforms
 PLATFORMS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
@@ -13,9 +14,11 @@ PLATFORMS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 all: $(TARGET)
 
 $(TARGET):
-	$(GOBUILD) -o $(TARGET) .
+	$(GOMODTIDY)
+	$(GOBUILD) -ldflags '-w' -o $(TARGET) .
 
 all-platforms:
+	$(GOMODTIDY)
 	$(foreach platform,$(PLATFORMS),\
 		$(eval OS := $(word 1,$(subst /, ,$(platform))))\
 		$(eval ARCH := $(word 2,$(subst /, ,$(platform))))\

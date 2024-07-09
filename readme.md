@@ -8,6 +8,8 @@ inblog is a static site generator (e.g. Hugo) that logs into an email account, d
 
 ### Quickstart
 
+There is a simple template repository for deploying inblog via GitHub Pages available in [weebney/inblog-pages-template](https://github.com/weebney/inblog-pages-template).
+
 Running `inblog` for the first time, you'll be thrown into a setup wizard which will allow you to configure inblog for use on your machine. Once everything is set up, you can start sending emails to the correct place. Then, to build your blog you just:
 
 ```console
@@ -50,7 +52,7 @@ inblog v1.0 (c) weebney 2024, BSD-2-Clause
 
 -----
 
-### Customization
+## Customization
 
 You can fully customize the look of your inblog by editing the HTML templates found in the `content/templates/` directory. You can utilize special tokens that will expand to various pieces of content relevant to these pages.
 
