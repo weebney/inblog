@@ -5,7 +5,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
-	"log"
 	"mime/quotedprintable"
 	"os"
 	"path/filepath"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"log"
 
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
@@ -70,18 +71,16 @@ func LoadConfig() (conf Config, needsWizard bool) {
 	return conf, false
 }
 
-func EnsureDirectories() {
-	dirs := []string{"content", "content/posts", "content/templates", "public", "public/posts"}
+func EnsureContent(contentDir string, outputDir string) {
+	dirs := []string{contentDir, contentDir + "/posts", contentDir + "/templates", outputDir, outputDir + "/posts"}
 	for _, dir := range dirs {
 		os.MkdirAll(dir, os.ModePerm)
 	}
-}
 
-func EnsureTemplates() {
 	templates := map[string]string{
-		"content/templates/listitem.template.html": `<li><a href="%HYPERLINK%">%SUBJECT%</a> <span>%DATE%</span>`,
-		"content/templates/index.template.html":    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Index - %BLOG_NAME%</title></head><body><h1>Index of %BLOG_NAME%</h1><ul>%LIST%</ul><footer><span>Powered by inblog</span></footer></body></html>`,
-		"content/templates/post.template.html":     `<!doctype html><html lang="en"><head><meta charset="utf8"><title>%SUBJECT% - %BLOG_NAME%</title></head><body><a href="../index.html">back</a><h1 id="subject">%SUBJECT%</h1><p id="date">%DATE%</p><div id="content">%BODY%</div></body></html>`,
+		contentDir + "/templates/listitem.template.html": `<li><a href="%HYPERLINK%">%SUBJECT%</a> <span>%DATE%</span>`,
+		contentDir + "/templates/index.template.html":    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Index - %BLOG_NAME%</title></head><body><h1>Index of %BLOG_NAME%</h1><ul>%LIST%</ul><footer><span>Powered by inblog</span></footer></body></html>`,
+		contentDir + "/templates/post.template.html":     `<!doctype html><html lang="en"><head><meta charset="utf8"><title>%SUBJECT% - %BLOG_NAME%</title></head><body><a href="../index.html">back</a><h1 id="subject">%SUBJECT%</h1><p id="date">%DATE%</p><div id="content">%BODY%</div></body></html>`,
 	}
 
 	for file, content := range templates {
@@ -127,7 +126,7 @@ func FetchEmails(config Config, lastUID uint32) []*imap.Message {
 	}
 
 	if len(uids) == 0 {
-		log.Println("No new messages found")
+		fmt.Printf("No new messages found!\n")
 		return nil
 	}
 
@@ -155,14 +154,14 @@ func FetchEmails(config Config, lastUID uint32) []*imap.Message {
 		log.Fatal(err)
 	}
 
-	log.Printf("Fetched %d new messages", len(newMessages))
+	fmt.Printf("Fetched %d new messages!\n", len(newMessages))
 
 	os.WriteFile(".cache", []byte(fmt.Sprintf("%d", mbox.UidNext-1)), 0o644)
 
 	return newMessages
 }
 
-func ProcessEmails(messages []*imap.Message) {
+func ProcessEmails(messages []*imap.Message, contentDir string) {
 	for _, msg := range messages {
 
 		subject := msg.Envelope.Subject
@@ -178,7 +177,7 @@ func ProcessEmails(messages []*imap.Message) {
 		}
 
 		content := fmt.Sprintf("%s\n%s\n%s", subject, date, body)
-		filename := fmt.Sprintf("content/posts/%d.md", msg.Uid)
+		filename := fmt.Sprintf(contentDir+"/posts/%d.md", msg.Uid)
 		os.WriteFile(filename, []byte(content), 0o644)
 	}
 }
@@ -237,17 +236,16 @@ func GetMessageBody(msg *imap.Message) (string, error) {
 	return content, nil
 }
 
-func GenerateHTML(config Config) {
-	files, _ := filepath.Glob("content/posts/*.md")
+func GenerateHTML(config Config, contentDir string, outputDir string) {
+	files, _ := filepath.Glob(contentDir + "/posts/*.md")
 	sort.Slice(files, func(i, j int) bool {
-		numI, _ := strconv.Atoi(strings.TrimPrefix(strings.TrimSuffix(files[i], ".md"), "content/posts/"))
-		numJ, _ := strconv.Atoi(strings.TrimPrefix(strings.TrimSuffix(files[j], ".md"), "content/posts/"))
+		numI, _ := strconv.Atoi(strings.TrimPrefix(strings.TrimSuffix(files[i], ".md"), contentDir+"/posts/"))
+		numJ, _ := strconv.Atoi(strings.TrimPrefix(strings.TrimSuffix(files[j], ".md"), contentDir+"/posts/"))
 		return numI > numJ
 	})
 
 	var listItems []string
 	for _, file := range files {
-		fmt.Println(file)
 		content, _ := os.ReadFile(file)
 		lines := strings.SplitN(string(content), "\n", 3)
 		subject, date := lines[0], lines[1]
@@ -258,28 +256,28 @@ func GenerateHTML(config Config) {
 		var buf strings.Builder
 		md.Convert([]byte(lines[2]), &buf)
 		md.Renderer()
-		postHTML := strings.Replace(readTemplate("post"), "%SUBJECT%", subject, -1)
+		postHTML := strings.Replace(readTemplate("post", contentDir), "%SUBJECT%", subject, -1)
 		postHTML = strings.Replace(postHTML, "%DATE%", date, -1)
 		postHTML = strings.Replace(postHTML, "%BODY%", buf.String(), -1)
 		postHTML = strings.Replace(postHTML, "%BLOG_NAME%", config.BlogName, -1)
 
-		postFilename := fmt.Sprintf("public/posts/%s%s.html", subject, date)
+		postFilename := fmt.Sprintf(outputDir+"/posts/%s%s.html", subject, date)
 		os.WriteFile(postFilename, []byte(postHTML), 0o644)
 
 		// generate list item
-		listItem := strings.Replace(readTemplate("listitem"), "%SUBJECT%", subject, -1)
+		listItem := strings.Replace(readTemplate("listitem", contentDir), "%SUBJECT%", subject, -1)
 		listItem = strings.Replace(listItem, "%DATE%", date, -1)
 		listItem = strings.Replace(listItem, "%HYPERLINK%", fmt.Sprintf("./posts/%s%s.html", subject, date), -1)
 		listItems = append(listItems, listItem)
 	}
 
 	// generate index
-	indexHTML := strings.Replace(readTemplate("index"), "%BLOG_NAME%", config.BlogName, -1)
+	indexHTML := strings.Replace(readTemplate("index", contentDir), "%BLOG_NAME%", config.BlogName, -1)
 	indexHTML = strings.Replace(indexHTML, "%LIST%", strings.Join(listItems, ""), -1)
-	os.WriteFile("public/index.html", []byte(indexHTML), 0o644)
+	os.WriteFile(outputDir+"/index.html", []byte(indexHTML), 0o644)
 }
 
-func readTemplate(name string) string {
-	content, _ := os.ReadFile(fmt.Sprintf("content/templates/%s.template.html", name))
+func readTemplate(name string, contentDir string) string {
+	content, _ := os.ReadFile(fmt.Sprintf(contentDir+"/templates/%s.template.html", name))
 	return string(content)
 }

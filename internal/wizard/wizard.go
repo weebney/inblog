@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"log"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -53,7 +54,7 @@ type step struct {
 
 func getSteps(c *inblog.Config) []step {
 	return []step{
-		{title: "Email Address", subtitle: "Enter the email address you want to send new posts to.\ne.g. myInblogEmail@example.com\n\nYou SHOULD make a new, dedicated email account to power your inblog.\nOutlook.com is the easiest to use with inblog; press enter to go to the registration page.\nFor technical reasons it is not possible to use some email providers, including Gmail.", field: &c.Email},
+		{title: "Email Address", subtitle: "Enter the email address you want to send new posts to.\ne.g. myInblogEmail@example.com\n\nYou SHOULD make a new, dedicated email account to power your inblog.\nOutlook.com is the easiest to use with inblog; press enter to go to\nthe registration page. For technical reasons, Gmail is not supported.", field: &c.Email},
 		{title: "Password", subtitle: "\n\n\n\nEnter the password for the email account\n", field: &c.Password},
 		{title: "IMAP Server", subtitle: "\n\n\nEnter the IMAP server address\n(e.g., imap.example.com:993)\n", field: &c.ImapServer},
 		{title: "Mailbox", subtitle: "\n\n\nEnter the mailbox name to use.\nLeave Blank for 'INBOX'\n", field: &c.Mailbox},
