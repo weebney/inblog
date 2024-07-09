@@ -2,7 +2,7 @@
 
 inblog turns your inbox into a blog
 
-## usage
+## Usage
 
 inblog depends on a handful of environment variables
 ```sh
@@ -30,7 +30,9 @@ Your blog will be generated in the `public/` directory, and you can serve this f
 
 You can check out [the repository for my personal blog](https://github.com/weebney/blog) to give you an idea what deploying inblog on GitHub pages is like and how to customize inblog yourself.
 
-### customization
+-----
+
+### Customization
 
 You can fully customize the look of your inblog by editing the HTML templates found in the `content/templates/` directory. You can utilize special tokens that will expand to various pieces of content relevant to these pages.
 
@@ -50,24 +52,36 @@ The following tokens are avaliable for `index.template.html`:
 - `%BLOG_NAME%`
 - `%LIST%`, which is just every post's `listitem.template.html`
 
+-----
 
-## installation
+## Installation
 
-inblog is dependent on:
-- grep, sed, etc.
-- curl
-- mpack
-- cmark
+### Homebrew
 
-Then, you can just download the script directly:
+inblog is available as a Homebrew package on Linux and macOS
 
 ```console
-$ cd blog
-$ curl -O https://raw.githubusercontent.com/weebney/inblog/master/inblog
+brew install weebney/inblog
 ```
 
-or with git
+### Go toolchain
+
+If you already have the Go toolchain installed, you can use `go install` to install inblog directly.
 
 ```console
-$ git clone https://github.com/weebney/inblog
+go install github.com/weebney/inblog@latest
 ```
+
+If it installs but isn't available, ensure `$(go env GOPATH)/bin` is exported to your `$PATH`.
+
+### Building
+
+A makefile is provided, but inblog can be built easily without it and depends only on the Go toolchain.
+
+```console
+go build inblog.go
+```
+
+### GitHub releases
+
+Binary releases of inblog are available on the [releases page](https://github.com/weebney/inblog/releases/latest). Just download the correct one and place it somewhere on your `$PATH`.
